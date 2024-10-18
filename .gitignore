@@ -24,6 +24,7 @@ go.work.sum
 # env file
 .env
 
-./src/build/Rikkas\ Repository.exe
-./src/build/S3/*
-./src/build/repository.db
+src/build/Rikkas\ Repository.exe
+src/build/S3/*
+src/build/repository.db
+*.zip
