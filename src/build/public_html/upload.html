@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+    <head>
+
+    </head>
+    <body>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <input type="file" id="fileInput" name="file" />
+            <button type="button" onclick="uploadFile()">Upload</button>
+        </form>
+
+        <script>
+            function uploadFile() {
+                const fileInput = document.getElementById('fileInput');
+                const file = fileInput.files[0];
+                const formData = new FormData();
+                formData.append('file', file);
+
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                }).then(response => response.text())
+                  .then(result => alert(result))
+                  .catch(error => console.error('Error:', error));
+            }
+        </script>
+    </body>
+</html>
