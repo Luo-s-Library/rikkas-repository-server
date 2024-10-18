@@ -25,4 +25,5 @@ go.work.sum
 .env
 
 ./src/build/Rikkas\ Repository.exe
-*.epub
+./src/build/S3/*
+./src/build/repository.db
