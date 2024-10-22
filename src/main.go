@@ -3,7 +3,6 @@ package main
 import (
 	"archive/zip"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -15,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"rikkas-repository/books"
 	"rikkas-repository/storage"
 	"strings"
 	"unicode"
@@ -27,8 +27,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/polly"
 	"github.com/aws/aws-sdk-go-v2/service/polly/types"
 	"github.com/aws/aws-sdk-go/aws"
-
-	_ "modernc.org/sqlite"
 )
 
 func DownloadMP3IfNotExists(text string, filePath string) error {
@@ -86,7 +84,7 @@ func contains(list []string, target string) bool {
 	return false
 }
 
-func ProcessHtml(n *html.Node, book *Book) string {
+func ProcessHtml(n *html.Node, book *books.Book) string {
 	if n.Data == "head" {
 		return ""
 	}
@@ -102,7 +100,7 @@ func ProcessHtml(n *html.Node, book *Book) string {
 	if n.Type == html.ElementNode && n.Data == "img" {
 		for _, d := range n.Attr {
 			if d.Key == "src" {
-				book.Sections = append(book.Sections, *NewSection())
+				book.Sections = append(book.Sections, *books.NewSection())
 				book.Sections[len(book.Sections)-1].ImageUrl = "images/" + filepath.Base(d.Val)
 				book.Sections[len(book.Sections)-1].IsImage = true
 				if !contains(book.Images, filepath.Base(d.Val)) {
@@ -146,14 +144,14 @@ func ProcessHtml(n *html.Node, book *Book) string {
 					inQuote = false
 				} else if char == '。' {
 					if !inQuote {
-						book.Sections = append(book.Sections, *NewSection())
+						book.Sections = append(book.Sections, *books.NewSection())
 						book.Sections[len(book.Sections)-1].Text = content
 						content = ""
 					}
 				}
 			}
 			if content != "" {
-				book.Sections = append(book.Sections, *NewSection())
+				book.Sections = append(book.Sections, *books.NewSection())
 				book.Sections[len(book.Sections)-1].Text = content
 			}
 
@@ -230,12 +228,12 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 
 	book := rc.Rootfiles[0]
 
-	processedBook := Book{
+	processedBook := books.Book{
 		Title:    book.Title,
-		Sections: []Section{},
+		Sections: []books.Section{},
 	}
 
-	if HasBook(book.Title) {
+	if storage.HasBook(book.Title) {
 		http.Error(w, "Book has already been uploaded", http.StatusInternalServerError)
 		return
 	}
@@ -312,7 +310,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 				if token.Class == tokenizer.DUMMY {
 					continue
 				}
-				processedBook.Sections[i].Tokens = append(processedBook.Sections[i].Tokens, Token{
+				processedBook.Sections[i].Tokens = append(processedBook.Sections[i].Tokens, books.Token{
 					Text:     token.Surface,
 					Features: token.Features(),
 				})
@@ -369,7 +367,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Add the entry to the database
-	AddBook(localUrl, book.Title, string(fileSize))
+	storage.AddBook(localUrl, book.Title, string(fileSize))
 
 }
 
@@ -457,153 +455,46 @@ func CopyImageIfNotExists(f *io.ReadCloser, dst string) error {
 	return nil
 }
 
-type Book struct {
-	Title    string
-	Sections []Section
-	Images   []string
-}
-
-func NewSection() *Section {
-	return &Section{
-		IsImage:    false,
-		ImageUrl:   "",
-		Text:       "",
-		Tokens:     []Token{},
-		HasWavFile: false,
-		WavFileUrl: "",
-	}
-}
-
-type Section struct {
-	IsImage    bool
-	ImageUrl   string
-	Text       string
-	Tokens     []Token
-	HasWavFile bool
-	WavFileUrl string
-}
-
-type Token struct {
-	Text     string
-	Furigana string
-	Features []string
-}
-
-func InitializeRepository() {
-	db, err := sql.Open("sqlite", "repository.db")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
-	createTableSQL := `CREATE TABLE IF NOT EXISTS Books (
-		"index" INTEGER PRIMARY KEY AUTOINCREMENT,
-		"localUrl" TEXT NOT NULL,
-		"title" TEXT NOT NULL,
-		"fileSize" TEXT NOT NULL
-	);`
-
-	_, err = db.Exec(createTableSQL)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println("Initialized Database")
-}
-
-func GetAllBooks() ([]BookLink, error) {
-	db, err := sql.Open("sqlite", "repository.db")
-	if err != nil {
-		return nil, fmt.Errorf("error opening repository: %w", err)
-	}
-	defer db.Close()
-
-	query := `SELECT "index", "localUrl", "title", "fileSize" FROM Books`
-
-	rows, err := db.Query(query)
-	if err != nil {
-		return nil, fmt.Errorf("error quering db: %w", err)
-	}
-	defer rows.Close()
-
-	var books []BookLink
-
-	for rows.Next() {
-		var book BookLink
-
-		err = rows.Scan(&book.index, &book.localUrl, &book.title, &book.fileSize)
-		if err != nil {
-			return nil, fmt.Errorf("error scanning item: %w", err)
-		}
-
-		books = append(books, book)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return books, nil
-}
-
-type BookLink struct {
-	index    int
-	localUrl string
-	title    string
-	fileSize string
-}
-
-func AddBook(localUrl, title, fileSize string) error {
-	db, err := sql.Open("sqlite", "repository.db")
-	if err != nil {
-		return fmt.Errorf("error opening repository: %w", err)
-	}
-	defer db.Close()
-
-	insertSQL := `INSERT INTO Books (localUrl, title, fileSize) VALUES (?, ?, ?)`
-
-	_, err = db.Exec(insertSQL, localUrl, title, fileSize)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func HasBook(title string) bool {
-	books, err := GetAllBooks()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for _, book := range books {
-		if title == book.title {
-			return true
-		}
-	}
-	return false
-}
-
 func main() {
 	// Initialize database
-	InitializeRepository()
-
-	books, err := GetAllBooks()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for _, book := range books {
-		fmt.Println(book.title)
-		http.HandleFunc("/download/"+book.title, func(w http.ResponseWriter, r *http.Request) {
-			http.ServeFile(w, r, book.localUrl)
-		})
-	}
+	storage.InitializeRepository()
 
 	http.HandleFunc("/upload", uploadFile)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./public_html/upload.html")
+		http.ServeFile(w, r, "./public_html/index.html")
+	})
+
+	http.HandleFunc("/style.css", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./public_html/style.css")
+	})
+
+	http.HandleFunc("/getbook", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("Serving book")
+		title := r.URL.Query().Get("title")
+
+		if title == "" {
+			fmt.Println("Book not found")
+			http.Error(w, "Title parameter is missing", http.StatusBadRequest)
+			return
+		}
+
+		book := storage.GetBook(title)
+		if book == nil {
+			http.Error(w, "Title not found", http.StatusNotFound)
+			return
+		}
+
+		http.ServeFile(w, r, book.LocalUrl)
+	})
+
+	http.HandleFunc("/getbooklist", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		bookshelf, err := storage.GetAllBooks()
+		if err != nil {
+			log.Fatal(err)
+		}
+		json.NewEncoder(w).Encode(bookshelf)
 	})
 
 	log.Fatal(http.ListenAndServe(":8080", nil))

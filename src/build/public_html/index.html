@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" href="/style.css">
+    </head>
+    <body>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <input type="file" id="fileInput" name="file" />
+            <button type="button" onclick="uploadFile()">Upload</button>
+        </form>
+
+        <script>
+            function uploadFile() {
+                const fileInput = document.getElementById('fileInput');
+                const file = fileInput.files[0];
+                const formData = new FormData();
+                formData.append('file', file);
+
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                }).then(response => response.text())
+                  .then(result => alert(result))
+                  .catch(error => console.error('Error:', error));
+            }
+        </script>
+
+        <button type="button" onclick="updateTable()">Refresh</button>
+        <table class="styled-table" id="dataTable">
+            <thead class="styled-table">
+                <tr>
+                    <th>Index</th>
+                    <th>Title</th>
+                    <th>Download</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Data will be inserted here -->
+            </tbody>
+        </table>
+        <script>
+            updateTable()
+            function makeTD(text) {
+                const cell = document.createElement('td');
+                cell.classList.add('styled-table')
+                cell.textContent = text
+                return cell
+            }
+            function createDownloadButtonCell(title) {
+                // Create the td element
+                const td = document.createElement('td');
+
+                // Create the button element
+                const button = document.createElement('button');
+                button.style.border = 'none';
+                button.style.backgroundColor = 'transparent';
+                button.style.cursor = 'pointer';
+                button.style.fontSize = '18px';
+                button.innerHTML = '⬇';  // Down arrow symbol
+
+                // Set up the button to download the file when clicked
+                button.addEventListener('click', () => {
+                        button.addEventListener('click', () => {
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = `/getbook?title=${encodeURIComponent(title)}`;
+                    downloadLink.download = `${title}.zip`;  // This triggers the download
+                    downloadLink.style.display = 'none';
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+                    });
+                });
+
+                // Append the button to the td element
+                td.appendChild(button);
+
+                return td;
+            }
+            function updateTable() {
+                fetch('/getbooklist')
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.querySelector('#dataTable tbody');
+                    
+                    tableBody.innerHTML = ''
+
+                    data.Books.forEach(item => {
+                        const row = document.createElement('tr');
+                        row.classList.add("styled-table")
+
+                        const indexCell = makeTD(item.Index);
+                        row.appendChild(indexCell);
+                        
+                        const titleCell = makeTD(item.Title);
+                        row.appendChild(titleCell);
+
+                        const downloadCell = createDownloadButtonCell(item.Title);
+                        row.appendChild(downloadCell);
+
+
+                        tableBody.appendChild(row);
+                    })
+                })
+                .catch(err => console.error('Error fetching data:', err));
+            }
+        </script>
+    </body>
+</html>
