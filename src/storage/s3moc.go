@@ -29,7 +29,7 @@ func Initialize() {
 func CreateDirectoryTreeForBook(title string) {
 	CreateDirectoryIfNotExists("./books/temp/" + title)
 	CreateDirectoryIfNotExists("./books/temp/" + title + "/images")
-	CreateDirectoryIfNotExists("./books/temp/" + title + "/mp3Dir")
+	CreateDirectoryIfNotExists("./books/temp/" + title + "/mp3")
 }
 
 func ClearCacheForBook(title string) {
