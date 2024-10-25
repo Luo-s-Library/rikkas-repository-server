@@ -37,8 +37,7 @@ type BookShelf struct {
 }
 
 type BookLink struct {
-	Index    int
-	LocalUrl string
-	Title    string
-	FileSize string
+	Title      string
+	CoverImage string
+	SoundFiles string
 }

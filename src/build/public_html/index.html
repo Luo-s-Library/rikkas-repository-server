@@ -8,7 +8,6 @@
             <input type="file" id="fileInput" name="file" />
             <button type="button" onclick="uploadFile()">Upload</button>
         </form>
-
         <script>
             function uploadFile() {
                 const fileInput = document.getElementById('fileInput');
@@ -16,21 +15,23 @@
                 const formData = new FormData();
                 formData.append('file', file);
 
-                fetch('/upload', {
+                fetch('/api/upload', {
                     method: 'POST',
                     body: formData
                 }).then(response => response.text())
-                  .then(result => alert(result))
+                  .then(result => {
+                    updateTable()
+                  })
                   .catch(error => console.error('Error:', error));
             }
         </script>
 
-        <button type="button" onclick="updateTable()">Refresh</button>
         <table class="styled-table" id="dataTable">
             <thead class="styled-table">
                 <tr>
-                    <th>Index</th>
+                    <th>Cover Page</th>
                     <th>Title</th>
+                    <th>MP3 Files</th>
                     <th>Download</th>
                 </tr>
             </thead>
@@ -46,38 +47,103 @@
                 cell.textContent = text
                 return cell
             }
-            function createDownloadButtonCell(title) {
-                // Create the td element
+            function makeCoverImage(title) {
+                const td = document.createElement('td')
+
+                const img = document.createElement('img')
+                img.src = '/api/cover?title='+title
+                img.style.width = "50px"
+                img.style.height = "auto"
+                td.appendChild(img)
+
+                return td
+            }
+            function createDownloadButton(title) {
+                const td = document.createElement('td')
+
+                // Create button element
+                const button = document.createElement('button');
+                button.innerText = `Download ${title}`; // Set button text
+
+                // Style the button
+                button.style.padding = '10px 20px';
+                button.style.border = 'none';
+                button.style.backgroundColor = '#4CAF50'; // Green background
+                button.style.color = 'white'; // White text
+                button.style.cursor = 'pointer';
+                button.style.borderRadius = '5px';
+
+                // Add hover effect
+                button.onmouseover = function() {
+                    button.style.backgroundColor = '#45a049'; // Darker green on hover
+                };
+                button.onmouseout = function() {
+                    button.style.backgroundColor = '#4CAF50'; // Original green
+                };
+
+                // Set the button click event
+                button.onclick = function() {
+                    // Create a temporary anchor element for download
+                    const a = document.createElement('a');
+                    a.href = `/api/getbook?title=${encodeURIComponent(title)}`; // Set download URL
+                    a.download = title; // Set the suggested file name
+                    document.body.appendChild(a); // Append to the body (needed for Firefox)
+                    a.click(); // Trigger the download
+                    document.body.removeChild(a); // Remove the anchor element
+                };
+
+                td.appendChild(button)
+
+                return td
+            }
+
+            function createButtonInCell(title) {
+                // Create td element
                 const td = document.createElement('td');
 
-                // Create the button element
+                // Create button element
                 const button = document.createElement('button');
+                button.innerText = title; // Set button text
+                
+                // Style the button
+                button.style.padding = '10px 20px';
                 button.style.border = 'none';
-                button.style.backgroundColor = 'transparent';
+                button.style.backgroundColor = '#4CAF50'; // Green background
+                button.style.color = 'white'; // White text
                 button.style.cursor = 'pointer';
-                button.style.fontSize = '18px';
-                button.innerHTML = '⬇';  // Down arrow symbol
+                button.style.borderRadius = '5px';
 
-                // Set up the button to download the file when clicked
-                button.addEventListener('click', () => {
-                        button.addEventListener('click', () => {
-                    const downloadLink = document.createElement('a');
-                    downloadLink.href = `/getbook?title=${encodeURIComponent(title)}`;
-                    downloadLink.download = `${title}.zip`;  // This triggers the download
-                    downloadLink.style.display = 'none';
-                    document.body.appendChild(downloadLink);
-                    downloadLink.click();
-                    document.body.removeChild(downloadLink);
-                    });
-                });
+                // Add hover effect
+                button.onmouseover = function() {
+                    button.style.backgroundColor = '#45a049'; // Darker green on hover
+                };
+                button.onmouseout = function() {
+                    button.style.backgroundColor = '#4CAF50'; // Original green
+                };
 
-                // Append the button to the td element
+                // Set the button click event
+                button.onclick = function() {
+                    fetch(`/api/generatemp3?title=${encodeURIComponent(title)}`)
+                        .then(response => {
+                            if (response.ok) {
+                                console.log("MP3 generation triggered.");
+                            } else {
+                                console.error("Failed to generate MP3.");
+                            }
+                            updateTable()
+                        })
+                        .catch(error => console.error('Error:', error));
+                };
+
+                // Append the button to the td
                 td.appendChild(button);
 
+                // Return the td element to be inserted into the table
                 return td;
             }
+
             function updateTable() {
-                fetch('/getbooklist')
+                fetch('/api/getbooklist')
                 .then(response => response.json())
                 .then(data => {
                     const tableBody = document.querySelector('#dataTable tbody');
@@ -88,15 +154,25 @@
                         const row = document.createElement('tr');
                         row.classList.add("styled-table")
 
-                        const indexCell = makeTD(item.Index);
+                        const indexCell = makeCoverImage(item.Title)
                         row.appendChild(indexCell);
                         
                         const titleCell = makeTD(item.Title);
                         row.appendChild(titleCell);
 
-                        const downloadCell = createDownloadButtonCell(item.Title);
-                        row.appendChild(downloadCell);
+                        if (item.SoundFiles === 'PREPARING') {
+                            const cell = makeTD('Preparing')
+                            row.appendChild(cell)
+                        } else if (item.SoundFiles === 'NOT_CREATED') {
+                            const cell = createButtonInCell(item.Title)
+                            row.appendChild(cell)
+                        } else if (item.SoundFiles === 'CREATED') {
+                            const cell = makeTD('Created')
+                            row.appendChild(cell)
+                        }
 
+                        const downloadCell = createDownloadButton(item.Title);
+                        row.appendChild(downloadCell);
 
                         tableBody.appendChild(row);
                     })
