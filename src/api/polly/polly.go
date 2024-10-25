@@ -42,7 +42,7 @@ func SynthesizeBook(title string) error {
 
 		fileName := fmt.Sprintf("%0*d", 7, numFiles)
 		numFiles++
-		filePath := "./books/temp/" + title + "/mp3Dir/" + fileName + ".mp3"
+		filePath := "./books/temp/" + title + "/mp3/" + fileName + ".mp3"
 		err := DownloadMP3IfNotExists(section.Text, filePath)
 		if err != nil {
 			return err
