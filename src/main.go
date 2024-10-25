@@ -100,9 +100,13 @@ func main() {
 			err := polly.SynthesizeBook(book.Title)
 			if err != nil {
 				fmt.Printf("error synthesizing sound files: %s", err.Error())
+				book.SoundFiles = "NOT_CREATED"
+				storage.UpdateBook(*book)
+				return
 			}
 			book.SoundFiles = "CREATED"
 			storage.UpdateBook(*book)
+			fmt.Printf("Finished Synthesizing %s\n", title)
 		}()
 
 		w.WriteHeader(http.StatusOK)

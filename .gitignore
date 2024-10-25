@@ -24,6 +24,9 @@ go.work.sum
 # env file
 .env
 
-src/build/S3/*
+src/build/downloading/
+src/build/books/
 src/build/repository.db
 *.zip
+*.epub
+credentials

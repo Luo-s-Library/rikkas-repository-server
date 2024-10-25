@@ -1,21 +1,20 @@
-FROM golang:1.23.2-alpine AS build
+FROM golang:1.23.1-alpine AS build
 
-WORKDIR /app
+WORKDIR /src
 
-COPY ./src .
-COPY ~/.aws/credentials .
+ARG AWS_CREDENTIALS_PATH
+COPY src/ /src/
+COPY  ${AWS_CREDENTIALS_PATH} /root/.aws/credentials
 
-RUN go build -o RikkasRepositoryServer
+RUN go build -o /src/build/RikkasRepositoryServer .
 
 FROM alpine:latest
 
 WORKDIR /app
 
-COPY --from=build /app/build/ /app/
-RUN mkdir -p /root/.aws
-COPY --from=build /app/credentials /root/.aws/credentials
-COPY --from=build /app/RikkasRepositoryServer /app/RikkasRepositoryServer
+COPY --from=build /src/build/ /app/
+COPY --from=build /root/.aws/credentials /root/.aws/credentials
 
-EXPOSE 8080
+EXPOSE 80
 
 CMD ["./RikkasRepositoryServer"]

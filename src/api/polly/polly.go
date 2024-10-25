@@ -22,7 +22,7 @@ func SynthesizeBook(title string) error {
 		return nil
 	}
 
-	jsonData, err := os.ReadFile("./books/temp/" + title + "data.json")
+	jsonData, err := os.ReadFile("./books/temp/" + title + "/data.json")
 	if err != nil {
 		return err
 	}
@@ -49,6 +49,7 @@ func SynthesizeBook(title string) error {
 		}
 		book.Sections[i].WavFileUrl = fileName + ".mp3"
 		book.Sections[i].HasWavFile = true
+		fmt.Printf("\rProgress: %.2f%%", 100*(float64(numFiles)/float64(len(book.Sections))))
 	}
 
 	// Re-zip the files and move them back to the books directory

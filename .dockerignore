@@ -1,1 +1,6 @@
 *.exe
+src/build/books/
+src/build/downloading/
+src/build/repository.db
+README.md
+.gitignore

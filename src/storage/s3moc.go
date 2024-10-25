@@ -23,7 +23,6 @@ func Initialize() {
 	CreateDirectoryIfNotExists("./downloading")
 	CreateDirectoryIfNotExists("./books")
 	CreateDirectoryIfNotExists("./books/temp")
-	CreateDirectoryIfNotExists("./books/processing")
 }
 
 /* Local File Storage */
