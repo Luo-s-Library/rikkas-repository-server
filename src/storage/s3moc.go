@@ -18,6 +18,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+var COL_TITLE = "title"
+var COL_COVER_IMG = "coverImage"
+var COL_SOUND_FILE_STATUS = "soundFileStatus"
+
 func Initialize() {
 	InitializeRepository()
 	CreateDirectoryIfNotExists("./downloading")
@@ -222,8 +226,7 @@ func ZipBook(book books.Book) error {
 		return err
 	}
 
-	// Ensure the output dir exists
-	CreateDirectoryIfNotExists("./books/" + book.Title)
+	CreateDirectoryIfNotExists("./books/" + book.Title + "/")
 
 	// zip the file
 	zipFilePath := "./books/" + book.Title + "/" + book.Title + ".zip"
@@ -231,9 +234,18 @@ func ZipBook(book books.Book) error {
 	if err != nil {
 		return err
 	}
-	os.Rename("./books/temp/"+book.Title+".zip", "./books/"+book.Title+"/"+book.Title+".zip")
+
+	MoveToDestination(book.Title)
 
 	return nil
+}
+
+func MoveToDestination(title string) {
+	CreateDirectoryIfNotExists("./books/" + title)
+
+	zipFilePath := "./books/" + title + "/" + title + ".zip"
+
+	os.Rename("./books/temp/"+title+".zip", zipFilePath)
 }
 
 /* Access Database */
@@ -256,11 +268,11 @@ func InitializeRepository() {
 	}
 	defer db.Close()
 
-	createTableSQL := `CREATE TABLE IF NOT EXISTS Books (
-		"title" TEXT NOT NULL,
-		"coverImage" TEXT NOT NULL,
-		"soundFiles" TEXT NOT NULL
-	);`
+	createTableSQL := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS Books (
+		"%s" TEXT NOT NULL,
+		"%s" TEXT NOT NULL,
+		"%s" TEXT NOT NULL
+	);`, COL_TITLE, COL_COVER_IMG, COL_SOUND_FILE_STATUS)
 
 	_, err = db.Exec(createTableSQL)
 	if err != nil {
@@ -270,14 +282,14 @@ func InitializeRepository() {
 	fmt.Println("Initialized Database")
 }
 
-func GetAllBooks() (*books.BookShelf, error) {
+func GetAllBooks() (*books.Library, error) {
 	db, err := sql.Open("sqlite", "repository.db")
 	if err != nil {
 		return nil, fmt.Errorf("error opening repository: %w", err)
 	}
 	defer db.Close()
 
-	query := `SELECT "title", "coverImage", "soundFiles" FROM Books`
+	query := fmt.Sprintf(`SELECT "%s", "%s", "%s" FROM Books`, COL_TITLE, COL_COVER_IMG, COL_SOUND_FILE_STATUS)
 
 	rows, err := db.Query(query)
 	if err != nil {
@@ -285,12 +297,12 @@ func GetAllBooks() (*books.BookShelf, error) {
 	}
 	defer rows.Close()
 
-	var booklist []books.BookLink
+	var booklist []books.Book
 
 	for rows.Next() {
-		var book books.BookLink
+		var book books.Book
 
-		err = rows.Scan(&book.Title, &book.CoverImage, &book.SoundFiles)
+		err = rows.Scan(&book.Title, &book.CoverImage, &book.AudioFileStatus)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning item: %w", err)
 		}
@@ -302,19 +314,19 @@ func GetAllBooks() (*books.BookShelf, error) {
 		return nil, err
 	}
 
-	return &books.BookShelf{Books: booklist}, nil
+	return &books.Library{Books: booklist}, nil
 }
 
-func AddBook(title, coverImage string) error {
+func AddBook(book books.Book) error {
 	db, err := sql.Open("sqlite", "repository.db")
 	if err != nil {
 		return fmt.Errorf("error opening repository: %w", err)
 	}
 	defer db.Close()
 
-	insertSQL := `INSERT INTO Books (title, coverImage, soundFiles) VALUES (?, ?, "NOT_CREATED")`
-
-	_, err = db.Exec(insertSQL, title, coverImage)
+	insertSQL := fmt.Sprintf(`INSERT INTO Books (%s, %s, %s) VALUES (?, ?, "NOT_CREATED")`, COL_TITLE, COL_COVER_IMG, COL_SOUND_FILE_STATUS)
+	fmt.Printf("Running Query: %s\n", insertSQL)
+	_, err = db.Exec(insertSQL, book.Title, book.CoverImage)
 	if err != nil {
 		return err
 	}
@@ -336,7 +348,7 @@ func HasBook(title string) bool {
 	return false
 }
 
-func UpdateBook(book books.BookLink) error {
+func UpdateBook(book books.Book) error {
 	// Open the SQLite database
 	db, err := sql.Open("sqlite", "repository.db")
 	if err != nil {
@@ -345,7 +357,7 @@ func UpdateBook(book books.BookLink) error {
 	defer db.Close()
 
 	// Prepare the SQL update statement
-	query := `UPDATE Books SET soundFiles = ? WHERE title = ?`
+	query := fmt.Sprintf(`UPDATE Books SET %s = ? WHERE %s = ?`, COL_SOUND_FILE_STATUS, COL_TITLE)
 	stmt, err := db.Prepare(query)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %v", err)
@@ -353,7 +365,7 @@ func UpdateBook(book books.BookLink) error {
 	defer stmt.Close()
 
 	// Execute the statement with the provided title and status
-	_, err = stmt.Exec(book.SoundFiles, book.Title)
+	_, err = stmt.Exec(book.AudioFileStatus, book.Title)
 	if err != nil {
 		return fmt.Errorf("failed to execute statement: %v", err)
 	}
@@ -361,7 +373,7 @@ func UpdateBook(book books.BookLink) error {
 	return nil
 }
 
-func GetBook(title string) *books.BookLink {
+func GetBook(title string) *books.Book {
 	bookshelf, err := GetAllBooks()
 	if err != nil {
 		log.Fatal(err)

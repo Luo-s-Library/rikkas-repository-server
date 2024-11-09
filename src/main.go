@@ -13,6 +13,24 @@ import (
 func main() {
 	storage.Initialize()
 
+	http.HandleFunc("/api/getcover", func(w http.ResponseWriter, r *http.Request) {
+		title := r.URL.Query().Get("title")
+
+		if title == "" {
+			http.Error(w, "Title parameter is missing", http.StatusBadRequest)
+			return
+		}
+
+		book := storage.GetBook(title)
+		if book == nil {
+			http.Error(w, "Title not found", http.StatusNotFound)
+			return
+		}
+		coverPath := "./books/" + book.Title + "/" + book.CoverImage
+
+		http.ServeFile(w, r, coverPath)
+	})
+
 	// Website View
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./public_html/index.html")
@@ -34,6 +52,17 @@ func main() {
 		w.WriteHeader(http.StatusCreated)
 	})
 
+	http.HandleFunc("/api/link", func(w http.ResponseWriter, r *http.Request) {
+		err := uploader.LinkZipFile(w, r)
+		if err != nil {
+			fmt.Println("Error linking zip file " + err.Error())
+			http.Error(w, "There was an error saving the zip file", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusCreated)
+	})
+
 	http.HandleFunc("/api/getbook", func(w http.ResponseWriter, r *http.Request) {
 		title := r.URL.Query().Get("title")
 
@@ -49,23 +78,6 @@ func main() {
 		}
 
 		http.ServeFile(w, r, "./books/"+book.Title+"/"+book.Title+".zip")
-	})
-
-	http.HandleFunc("/api/cover", func(w http.ResponseWriter, r *http.Request) {
-		title := r.URL.Query().Get("title")
-
-		if title == "" {
-			http.Error(w, "Title parameter is missing", http.StatusBadRequest)
-			return
-		}
-
-		book := storage.GetBook(title)
-		if book == nil {
-			http.Error(w, "Title not found", http.StatusNotFound)
-			return
-		}
-
-		http.ServeFile(w, r, "./books/"+book.Title+"/"+book.CoverImage)
 	})
 
 	http.HandleFunc("/api/getbooklist", func(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +102,7 @@ func main() {
 			http.Error(w, "Title not found", http.StatusNotFound)
 			return
 		}
-		book.SoundFiles = "PREPARING"
+		book.AudioFileStatus = "PREPARING"
 		err := storage.UpdateBook(*book)
 		if err != nil {
 			log.Fatal(err)
@@ -100,11 +112,12 @@ func main() {
 			err := polly.SynthesizeBook(book.Title)
 			if err != nil {
 				fmt.Printf("error synthesizing sound files: %s", err.Error())
-				book.SoundFiles = "NOT_CREATED"
+				book.AudioFileStatus = "NOT_CREATED"
 				storage.UpdateBook(*book)
 				return
 			}
-			book.SoundFiles = "CREATED"
+			book.AudioFileStatus = "CREATED"
+			book.HasAudioFiles = true
 			storage.UpdateBook(*book)
 			fmt.Printf("Finished Synthesizing %s\n", title)
 		}()

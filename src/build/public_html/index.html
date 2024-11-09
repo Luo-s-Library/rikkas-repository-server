@@ -7,8 +7,24 @@
         <form id="uploadForm" enctype="multipart/form-data">
             <input type="file" id="fileInput" name="file" />
             <button type="button" onclick="uploadFile()">Upload</button>
+            <button type="button" onclick="linkFile()">Link</button>
         </form>
         <script>
+            function linkFile() {
+                const fileInput = document.getElementById('fileInput');
+                const file = fileInput.files[0];
+                const formData = new FormData();
+                formData.append('file', file);
+
+                fetch('/api/link', {
+                    method: 'POST',
+                    body: formData
+                }).then(response => response.text())
+                  .then(result => {
+                    updateTable()
+                  })
+                  .catch(err => console.error('Error: ', error));
+            }
             function uploadFile() {
                 const fileInput = document.getElementById('fileInput');
                 const file = fileInput.files[0];
@@ -52,7 +68,7 @@
                 const td = document.createElement('td')
 
                 const img = document.createElement('img')
-                img.src = '/api/cover?title='+title
+                img.src = '/api/getcover?title='+title
                 img.style.width = "50px"
                 img.style.height = "auto"
                 td.appendChild(img)
@@ -151,28 +167,30 @@
                     
                     tableBody.innerHTML = ''
 
-                    data.Books.forEach(item => {
+                    if (data.Books === null)
+                        return
+                    data.books.forEach(item => {
                         const row = document.createElement('tr');
                         row.classList.add("styled-table")
 
-                        const indexCell = makeCoverImage(item.Title)
+                        const indexCell = makeCoverImage(item.title)
                         row.appendChild(indexCell);
                         
-                        const titleCell = makeTD(item.Title);
+                        const titleCell = makeTD(item.title);
                         row.appendChild(titleCell);
 
-                        if (item.SoundFiles === 'PREPARING') {
+                        if (item.audioFileStatus === 'PREPARING') {
                             const cell = makeTD('Preparing')
                             row.appendChild(cell)
-                        } else if (item.SoundFiles === 'NOT_CREATED') {
-                            const cell = createButtonInCell(item.Title)
+                        } else if (item.audioFileStatus === 'NOT_CREATED') {
+                            const cell = createButtonInCell(item.title)
                             row.appendChild(cell)
-                        } else if (item.SoundFiles === 'CREATED') {
+                        } else if (item.audioFileStatus === 'CREATED') {
                             const cell = makeTD('Created')
                             row.appendChild(cell)
                         }
 
-                        const downloadCell = createDownloadButton(item.Title);
+                        const downloadCell = createDownloadButton(item.title);
                         row.appendChild(downloadCell);
 
                         tableBody.appendChild(row);

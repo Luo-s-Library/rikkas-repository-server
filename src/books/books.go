@@ -1,11 +1,5 @@
 package books
 
-type Book struct {
-	Title    string
-	Sections []Section
-	Images   []string
-}
-
 func NewSection() *Section {
 	return &Section{
 		IsImage:    false,
@@ -17,27 +11,29 @@ func NewSection() *Section {
 	}
 }
 
+type Book struct {
+	Title           string    `json:"title"`
+	CoverImage      string    `json:"coverImage"`
+	AudioFileStatus string    `json:"audioFileStatus"`
+	HasAudioFiles   bool      `json:"hasAudioFiles`
+	Images          []string  `json:"images"`
+	Sections        []Section `json:"content"`
+}
+
 type Section struct {
-	IsImage    bool
-	ImageUrl   string
-	Text       string
-	Tokens     []Token
-	HasWavFile bool
-	WavFileUrl string
+	IsImage    bool    `json:"isImage"`
+	ImageUrl   string  `json:"imageUrl"`
+	Text       string  `json:"text"`
+	Tokens     []Token `json:"tokens"`
+	HasWavFile bool    `json:"hasAudioFile"`
+	WavFileUrl string  `json:"audioFileUrl"`
 }
 
 type Token struct {
-	Text     string
-	Furigana string
-	Features []string
+	Text     string   `json:"text"`
+	Features []string `json:"features"`
 }
 
-type BookShelf struct {
-	Books []BookLink
-}
-
-type BookLink struct {
-	Title      string
-	CoverImage string
-	SoundFiles string
+type Library struct {
+	Books []Book `json:"books"`
 }

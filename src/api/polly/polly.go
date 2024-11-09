@@ -19,7 +19,7 @@ func SynthesizeBook(title string) error {
 	// Unzip to /books/temp/title
 	err := storage.Unzip("./books/"+title+"/"+title+".zip", "./books/temp/")
 	if err != nil {
-		return nil
+		return err
 	}
 
 	jsonData, err := os.ReadFile("./books/temp/" + title + "/data.json")

@@ -1,6 +1,7 @@
 package uploader
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,13 +19,48 @@ import (
 
 var DownloadDirectory = "./downloading/"
 
-func UploadBook(w http.ResponseWriter, r *http.Request) error {
-	// Get File from Form Request
-	filename, err := recvFileFromForm(r)
+func LinkZipFile(w http.ResponseWriter, r *http.Request) error {
+	filename, err := recvFileFromForm(r, ".zip", "./books/temp/")
 	if err != nil {
 		return err
 	}
-	defer storage.DeleteFile(filename)
+	//defer storage.DeleteFile(filename)
+
+	title := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
+
+	// Unzip to /books/temp/title
+	err = storage.Unzip(filename, "./books/temp/")
+	if err != nil {
+		return err
+	}
+	//defer storage.ClearCacheForBook(title)
+
+	jsonData, err := os.ReadFile("./books/temp/" + title + "/data.json")
+	if err != nil {
+		return err
+	}
+
+	var book books.Book
+	err = json.Unmarshal(jsonData, &book)
+	if err != nil {
+		return err
+	}
+
+	storage.MoveToDestination(title)
+	storage.CopyFile("./books/temp/"+title+"/images/"+book.CoverImage, "./books/"+title+"/"+book.CoverImage)
+
+	storage.AddBook(book)
+
+	return nil
+}
+
+func UploadBook(w http.ResponseWriter, r *http.Request) error {
+	// Get File from Form Request
+	filename, err := recvFileFromForm(r, ".epub", DownloadDirectory)
+	if err != nil {
+		return err
+	}
+	//defer storage.DeleteFile(filename)
 
 	// Open the .epub Reader
 	rc, err := epub.OpenReader(filename)
@@ -41,9 +77,12 @@ func UploadBook(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	processedBook := books.Book{
-		Title:    book.Title,
-		Sections: []books.Section{},
-		Images:   []string{},
+		Title:           book.Title,
+		CoverImage:      "",
+		AudioFileStatus: "NOT_CREATED",
+		HasAudioFiles:   false,
+		Images:          []string{},
+		Sections:        []books.Section{},
 	}
 
 	// Create dir for unzipping the book
@@ -75,21 +114,22 @@ func UploadBook(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	storage.ZipBook(processedBook)
-
 	// Save Cover page
 	coverImg, err := SaveCoverImage(book.Title, processedBook.Images)
 	if err != nil {
 		return err
 	}
+	processedBook.CoverImage = coverImg
+
+	storage.ZipBook(processedBook)
 
 	// Add the entry to the database
-	storage.AddBook(book.Title, coverImg)
+	storage.AddBook(processedBook)
 
 	return nil
 }
 
-func recvFileFromForm(r *http.Request) (string, error) {
+func recvFileFromForm(r *http.Request, extension string, destination string) (string, error) {
 	r.ParseMultipartForm(10 << 20)
 
 	file, handler, err := r.FormFile("file")
@@ -98,11 +138,11 @@ func recvFileFromForm(r *http.Request) (string, error) {
 	}
 	defer file.Close()
 
-	if filepath.Ext(handler.Filename) != ".epub" {
+	if filepath.Ext(handler.Filename) != extension {
 		return "", fmt.Errorf("uploaded file was not an ebook: %w", err)
 	}
 
-	dst, err := os.Create(DownloadDirectory + handler.Filename)
+	dst, err := os.Create(destination + handler.Filename)
 	if err != nil {
 		return "", fmt.Errorf("error creating output file: %w", err)
 	}
@@ -113,7 +153,7 @@ func recvFileFromForm(r *http.Request) (string, error) {
 		return "", fmt.Errorf("error saving file: %w", err)
 	}
 
-	return DownloadDirectory + handler.Filename, nil
+	return destination + handler.Filename, nil
 }
 
 func tokenizeBook(book *books.Book) {
@@ -140,7 +180,8 @@ func SaveCoverImage(title string, images []string) (string, error) {
 		return "", fmt.Errorf("no images provided")
 	}
 	for _, img := range images {
-		if strings.TrimSuffix(img, filepath.Ext(img)) == "cover" {
+		if strings.Contains(strings.TrimSuffix(img, filepath.Ext(img)), "cover") {
+			storage.CreateDirectoryIfNotExists(fmt.Sprintf("./books/%s/", title))
 			err := storage.CopyFile("./books/temp/"+title+"/images/"+img, "./books/"+title+"/"+img)
 			if err != nil {
 				return "", err
@@ -203,15 +244,15 @@ func ProcessHtml(n *html.Node, book *books.Book) string {
 	if n.Data == "body" {
 		for _, d := range n.Attr {
 			if d.Key == "class" {
-				if d.Val == "p-caution" || d.Val == "p-colophon" {
+				if d.Val == "p-caution" || d.Val == "p-colophon" || d.Val == "p-titlepage" {
 					return ""
 				}
 			}
 		}
 	}
-	if n.Type == html.ElementNode && n.Data == "img" {
+	if n.Type == html.ElementNode && (n.Data == "img" || n.Data == "image") {
 		for _, d := range n.Attr {
-			if d.Key == "src" {
+			if d.Key == "src" || d.Key == "href" {
 				book.Sections = append(book.Sections, *books.NewSection())
 				book.Sections[len(book.Sections)-1].ImageUrl = filepath.Base(d.Val)
 				book.Sections[len(book.Sections)-1].IsImage = true
