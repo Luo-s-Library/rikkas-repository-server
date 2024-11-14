@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"rikkas-repository/api/polly"
 	"rikkas-repository/api/uploader"
 	"rikkas-repository/storage"
 )
@@ -38,6 +37,9 @@ func main() {
 
 	http.HandleFunc("/style.css", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./public_html/style.css")
+	})
+	http.HandleFunc("/script.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./public_html/script.js")
 	})
 
 	// api
@@ -87,42 +89,6 @@ func main() {
 			log.Fatal(err)
 		}
 		json.NewEncoder(w).Encode(bookshelf)
-	})
-
-	http.HandleFunc("/api/generatemp3", func(w http.ResponseWriter, r *http.Request) {
-		title := r.URL.Query().Get("title")
-
-		if title == "" {
-			http.Error(w, "Title parameter is missing", http.StatusBadRequest)
-			return
-		}
-
-		book := storage.GetBook(title)
-		if book == nil {
-			http.Error(w, "Title not found", http.StatusNotFound)
-			return
-		}
-		book.AudioFileStatus = "PREPARING"
-		err := storage.UpdateBook(*book)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		go func() {
-			err := polly.SynthesizeBook(book.Title)
-			if err != nil {
-				fmt.Printf("error synthesizing sound files: %s", err.Error())
-				book.AudioFileStatus = "NOT_CREATED"
-				storage.UpdateBook(*book)
-				return
-			}
-			book.AudioFileStatus = "CREATED"
-			book.HasAudioFiles = true
-			storage.UpdateBook(*book)
-			fmt.Printf("Finished Synthesizing %s\n", title)
-		}()
-
-		w.WriteHeader(http.StatusOK)
 	})
 
 	log.Fatal(http.ListenAndServe(":80", nil))

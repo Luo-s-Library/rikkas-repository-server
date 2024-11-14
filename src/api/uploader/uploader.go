@@ -77,12 +77,14 @@ func UploadBook(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	processedBook := books.Book{
-		Title:           book.Title,
-		CoverImage:      "",
-		AudioFileStatus: "NOT_CREATED",
-		HasAudioFiles:   false,
-		Images:          []string{},
-		Sections:        []books.Section{},
+		Title:      book.Title,
+		CoverImage: "",
+		Images:     []string{},
+		Chapters: []books.Chapter{
+			{
+				Sections: []books.Section{},
+			},
+		},
 	}
 
 	// Create dir for unzipping the book
@@ -90,7 +92,7 @@ func UploadBook(w http.ResponseWriter, r *http.Request) error {
 	defer storage.ClearCacheForBook(book.Title)
 
 	// Process the Book in to our own format
-	for _, section := range book.Spine.Itemrefs {
+	for i, section := range book.Spine.Itemrefs {
 		f, err := section.Open()
 		if err != nil {
 			return err
@@ -103,6 +105,19 @@ func UploadBook(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		ProcessHtml(doc, &processedBook)
+		if i != len(book.Spine.Itemrefs)-1 && len(processedBook.Chapters[len(processedBook.Chapters)-1].Sections) > 0 {
+			allContentIsImages := true
+			for _, content := range processedBook.Chapters[len(processedBook.Chapters)-1].Sections {
+				if !content.IsImage {
+					allContentIsImages = false
+				}
+			}
+			if !allContentIsImages {
+				processedBook.Chapters = append(processedBook.Chapters, books.Chapter{
+					Sections: []books.Section{},
+				})
+			}
+		}
 	}
 
 	// Tokenize the Japanese text
@@ -159,17 +174,19 @@ func recvFileFromForm(r *http.Request, extension string, destination string) (st
 func tokenizeBook(book *books.Book) {
 	t := tokenizer.New()
 
-	for i, sentence := range book.Sections {
-		if !sentence.IsImage {
-			tokens := t.Analyze(sentence.Text, tokenizer.Normal)
-			for _, token := range tokens {
-				if token.Class == tokenizer.DUMMY {
-					continue
+	for i, chapter := range book.Chapters {
+		for j, sentence := range chapter.Sections {
+			if !sentence.IsImage {
+				tokens := t.Analyze(sentence.Text, tokenizer.Normal)
+				for _, token := range tokens {
+					if token.Class == tokenizer.DUMMY {
+						continue
+					}
+					book.Chapters[i].Sections[j].Tokens = append(book.Chapters[i].Sections[j].Tokens, books.Token{
+						Text:     token.Surface,
+						Features: token.Features(),
+					})
 				}
-				book.Sections[i].Tokens = append(book.Sections[i].Tokens, books.Token{
-					Text:     token.Surface,
-					Features: token.Features(),
-				})
 			}
 		}
 	}
@@ -244,18 +261,26 @@ func ProcessHtml(n *html.Node, book *books.Book) string {
 	if n.Data == "body" {
 		for _, d := range n.Attr {
 			if d.Key == "class" {
-				if d.Val == "p-caution" || d.Val == "p-colophon" || d.Val == "p-titlepage" {
+				if d.Val == "p-caution" || d.Val == "p-colophon" {
 					return ""
 				}
 			}
 		}
 	}
+	lastChapter := len(book.Chapters) - 1
+	if lastChapter == -1 {
+		fmt.Println("Error: number of chapters is 0")
+	}
+	lastSection := len(book.Chapters[lastChapter].Sections)
+	if lastChapter == -1 {
+		fmt.Println("Error: number of sections is 0")
+	}
 	if n.Type == html.ElementNode && (n.Data == "img" || n.Data == "image") {
 		for _, d := range n.Attr {
 			if d.Key == "src" || d.Key == "href" {
-				book.Sections = append(book.Sections, *books.NewSection())
-				book.Sections[len(book.Sections)-1].ImageUrl = filepath.Base(d.Val)
-				book.Sections[len(book.Sections)-1].IsImage = true
+				book.Chapters[lastChapter].Sections = append(book.Chapters[lastChapter].Sections, *books.NewSection())
+				book.Chapters[lastChapter].Sections[lastSection].ImageUrl = filepath.Base(d.Val)
+				book.Chapters[lastChapter].Sections[lastSection].IsImage = true
 				if !contains(book.Images, filepath.Base(d.Val)) {
 					book.Images = append(book.Images, filepath.Base(d.Val))
 				}
@@ -264,7 +289,7 @@ func ProcessHtml(n *html.Node, book *books.Book) string {
 		}
 	}
 	if n.Type == html.ElementNode && n.Data == "ruby" {
-		var kanjiText string
+		kanjiText := ""
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			if c.Type == html.TextNode {
 				kanjiText += c.Data
@@ -275,11 +300,6 @@ func ProcessHtml(n *html.Node, book *books.Book) string {
 		return kanjiText
 	} else if n.Type == html.TextNode {
 		text := n.Data
-
-		if IsWhitespaceOnly(text) {
-			return ""
-		}
-
 		return strings.TrimSpace(text)
 	} else {
 		text := ""
@@ -297,17 +317,17 @@ func ProcessHtml(n *html.Node, book *books.Book) string {
 					inQuote = false
 				} else if char == '。' {
 					if !inQuote {
-						book.Sections = append(book.Sections, *books.NewSection())
-						book.Sections[len(book.Sections)-1].Text = content
+						book.Chapters[lastChapter].Sections = append(book.Chapters[lastChapter].Sections, *books.NewSection())
+						book.Chapters[lastChapter].Sections[lastSection].Text = content
 						content = ""
+						lastSection++
 					}
 				}
 			}
-			if content != "" {
-				book.Sections = append(book.Sections, *books.NewSection())
-				book.Sections[len(book.Sections)-1].Text = content
+			if !IsWhitespaceOnly(content) {
+				book.Chapters[lastChapter].Sections = append(book.Chapters[lastChapter].Sections, *books.NewSection())
+				book.Chapters[lastChapter].Sections[lastSection].Text = content
 			}
-
 		}
 	}
 	return ""

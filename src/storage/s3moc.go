@@ -20,7 +20,6 @@ import (
 
 var COL_TITLE = "title"
 var COL_COVER_IMG = "coverImage"
-var COL_SOUND_FILE_STATUS = "soundFileStatus"
 
 func Initialize() {
 	InitializeRepository()
@@ -270,9 +269,8 @@ func InitializeRepository() {
 
 	createTableSQL := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS Books (
 		"%s" TEXT NOT NULL,
-		"%s" TEXT NOT NULL,
 		"%s" TEXT NOT NULL
-	);`, COL_TITLE, COL_COVER_IMG, COL_SOUND_FILE_STATUS)
+	);`, COL_TITLE, COL_COVER_IMG)
 
 	_, err = db.Exec(createTableSQL)
 	if err != nil {
@@ -289,7 +287,7 @@ func GetAllBooks() (*books.Library, error) {
 	}
 	defer db.Close()
 
-	query := fmt.Sprintf(`SELECT "%s", "%s", "%s" FROM Books`, COL_TITLE, COL_COVER_IMG, COL_SOUND_FILE_STATUS)
+	query := fmt.Sprintf(`SELECT "%s", "%s" FROM Books ORDER BY %s`, COL_TITLE, COL_COVER_IMG, COL_TITLE)
 
 	rows, err := db.Query(query)
 	if err != nil {
@@ -302,7 +300,7 @@ func GetAllBooks() (*books.Library, error) {
 	for rows.Next() {
 		var book books.Book
 
-		err = rows.Scan(&book.Title, &book.CoverImage, &book.AudioFileStatus)
+		err = rows.Scan(&book.Title, &book.CoverImage)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning item: %w", err)
 		}
@@ -324,7 +322,7 @@ func AddBook(book books.Book) error {
 	}
 	defer db.Close()
 
-	insertSQL := fmt.Sprintf(`INSERT INTO Books (%s, %s, %s) VALUES (?, ?, "NOT_CREATED")`, COL_TITLE, COL_COVER_IMG, COL_SOUND_FILE_STATUS)
+	insertSQL := fmt.Sprintf(`INSERT INTO Books (%s, %s) VALUES (?, ?)`, COL_TITLE, COL_COVER_IMG)
 	fmt.Printf("Running Query: %s\n", insertSQL)
 	_, err = db.Exec(insertSQL, book.Title, book.CoverImage)
 	if err != nil {
@@ -346,31 +344,6 @@ func HasBook(title string) bool {
 		}
 	}
 	return false
-}
-
-func UpdateBook(book books.Book) error {
-	// Open the SQLite database
-	db, err := sql.Open("sqlite", "repository.db")
-	if err != nil {
-		return fmt.Errorf("failed to open database: %v", err)
-	}
-	defer db.Close()
-
-	// Prepare the SQL update statement
-	query := fmt.Sprintf(`UPDATE Books SET %s = ? WHERE %s = ?`, COL_SOUND_FILE_STATUS, COL_TITLE)
-	stmt, err := db.Prepare(query)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %v", err)
-	}
-	defer stmt.Close()
-
-	// Execute the statement with the provided title and status
-	_, err = stmt.Exec(book.AudioFileStatus, book.Title)
-	if err != nil {
-		return fmt.Errorf("failed to execute statement: %v", err)
-	}
-
-	return nil
 }
 
 func GetBook(title string) *books.Book {
